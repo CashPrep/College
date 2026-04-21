@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>College Money Map · CashPrep</title>
+  <meta name="description" content="CashPrep: estimate yearly college spending money by school or state, with meal plan and lifestyle inputs, excluding tuition." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Google AdSense -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5702568182016225"
+     crossorigin="anonymous"></script>
+
+  <style>
+    :root{--bg1:#0f172a;--bg2:#111827;--accent:#7c3aed;--accent2:#06b6d4;}
+    body{background:linear-gradient(135deg,var(--bg1),var(--bg2));}
+    .glass{background:rgba(255,255,255,.08);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.12)}
+    .chip{transition:.2s;}
+    .chip.active{transform:translateY(-1px);box-shadow:0 10px 25px rgba(255,255,255,.25)}
+    details summary::-webkit-details-marker{display:none;}
+    details summary::marker{display:none;}
+  </style>
+</head>
+<body class="min-h-screen text-white">
+  <div id="app" class="max-w-6xl mx-auto p-4 md:p-8 space-y-8">
+    <!-- Header + Search -->
+    <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <div>
+        <p class="uppercase tracking-[.35em] text-cyan-300 text-xs">CashPrep · College budget estimator</p>
+        <h1 class="text-3xl md:text-5xl font-black mt-2">College Money Map</h1>
+        <p class="text-slate-300 mt-2 max-w-2xl">
+          Estimate how much spending money to save for a year of college, excluding tuition, using school, state, meal-plan, and lifestyle inputs.
+        </p>
+      </div>
+      <div class="glass rounded-2xl p-4 w-full md:w-80">
+        <label class="text-sm text-slate-300">Search school</label>
+        <input
+          id="schoolSearch"
+          class="mt-2 w-full rounded-xl bg-slate-950/60 border border-white/10 px-4 py-3 outline-none"
+          placeholder="Type your college"
+        />
+        <div id="schoolResults" class="mt-3 max-h-56 overflow-auto space-y-2"></div>
+      </div>
+    </div>
+
+    <!-- Main layout -->
+    <div class="grid lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2 space-y-6">
+        <!-- Step 1 -->
+        <div class="glass rounded-3xl p-5 md:p-6">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold">1. Pick a school or state</h2>
+            <span id="themeBadge" class="text-xs px-3 py-1 rounded-full bg-white/10">Default theme</span>
+          </div>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="text-sm text-slate-300">Selected school</label>
+              <div
+                id="selectedSchool"
+                class="mt-2 rounded-2xl border border-white/10 p-4 bg-slate-950/40"
+              >
+                None selected
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300">State fallback</label>
+              <select
+                id="stateSelect"
+                class="mt-2 w-full rounded-xl bg-slate-950/60 border border-white/10 px-4 py-3"
+              ></select>
+              <p class="text-xs text-slate-400 mt-2">
+                Used when the school is not found.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="glass rounded-3xl p-5 md:p-6">
+          <h2 class="text-xl font-bold mb-4">2. Meal setup</h2>
+          <div class="flex flex-wrap gap-3 mb-3">
+            <button class="chip px-4 py-2 rounded-full bg-white/10" data-meal="plan">Meal plan</button>
+            <button class="chip px-4 py-2 rounded-full bg-white/10" data-meal="no_plan">No meal plan</button>
+          </div>
+          <p id="mealNote" class="text-sm text-slate-300"></p>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="glass rounded-3xl p-5 md:p-6">
+          <h2 class="text-xl font-bold mb-4">3. What matters most?</h2>
+          <p class="text-sm text-slate-300 mb-3">
+            Drag each slider from 1 (low) to 4 (high) based on how important that category is to you this year.
+          </p>
+          <div id="weights" class="grid md:grid-cols-2 gap-4"></div>
+        </div>
+      </div>
+
+      <!-- Right column: estimate + info -->
+      <div class="space-y-6">
+        <div class="glass rounded-3xl p-5 md:p-6">
+          <h2 class="text-xl font-bold mb-4">Estimate</h2>
+          <div class="text-5xl font-black" id="estimate">$0</div>
+          <p class="text-slate-300 mt-2">
+            Suggested yearly spending money, excluding tuition.
+          </p>
+          <canvas id="chart" class="mt-4"></canvas>
+        </div>
+
+        <div class="glass rounded-3xl p-5 md:p-6 text-sm text-slate-300 space-y-2">
+          <h3 class="font-bold text-white mb-1">What is included</h3>
+          <ul class="space-y-2 list-disc pl-5">
+            <li>Food, groceries, takeout, bars, parties, local transport, and personal spending.</li>
+            <li>Meal-plan and off-campus assumptions are separated so no-meal-plan students can still be modeled.</li>
+            <li>School themes switch automatically when a campus is selected.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- About, Privacy, Contact (new main sections) -->
+    <div class="grid md:grid-cols-3 gap-4">
+      <!-- About CashPrep & estimates -->
+      <div class="glass rounded-3xl p-5 md:p-6 text-sm text-slate-200 space-y-3">
+        <h2 class="font-bold text-white text-lg">About CashPrep estimates</h2>
+        <p>
+          CashPrep is a simple planning tool that focuses on the living‑expense part of college costs
+          and intentionally leaves tuition out. It helps you think about how much spending money you
+          may want to save for one academic year.
+        </p>
+        <p>
+          The estimates draw on the same ideas colleges and the U.S. Department of Education use
+          when they build a student’s “cost of attendance,” which combines housing, food, transport,
+          and personal costs alongside tuition and fees.[web:28][web:31]
+        </p>
+        <p>
+          For this demo, the campus and state baselines are set using representative ranges for room,
+          board, transportation, and personal expenses reported in public cost-of-attendance and
+          affordability research, not the official numbers for any school.[web:30][web:37]
+        </p>
+        <p>
+          Sliders for spending, takeout, bars, and partying, along with a nightlife index for some
+          campuses, adjust the baseline up or down to reflect different lifestyles. The result is an
+          approximate yearly spending‑money target, not a guarantee of your actual costs.[web:27][web:29]
+        </p>
+      </div>
+
+      <!-- Privacy Policy (web-level) -->
+      <div class="glass rounded-3xl p-5 md:p-6 text-sm text-slate-200 space-y-3">
+        <h2 class="font-bold text-white text-lg">Privacy policy</h2>
+        <p>
+          This CashPrep calculator runs as a static web page and is not built to collect personal
+          information such as your name, address, or payment details. The numbers you type and the
+          sliders you use are processed only in your browser to show you an estimate.[web:32][web:38]
+        </p>
+        <p>
+          No account system, user login, or direct payment processing is built into this page. As long
+          as it is hosted on a static platform without extra analytics or tracking scripts, the site
+          itself does not store or sell your personal data.[web:32][web:38]
+        </p>
+        <p>
+          Third‑party services used with this site, such as the hosting provider or ad networks like
+          Google AdSense, may still collect technical information (for example IP address, device
+          type, or general location) to operate and secure their platforms.[web:32][web:35]
+        </p>
+        <p>
+          Your use of this page is also subject to the privacy and cookie policies of those third‑party
+          providers. You can review their published privacy policies to learn more about what they
+          collect and how they use it.[web:32][web:38]
+        </p>
+        <p>
+          This privacy notice is a general description for an educational calculator and is not legal
+          advice. If you republish or customize CashPrep, you are responsible for ensuring that your
+          version complies with any privacy laws that apply to your users.[web:32][web:35]
+        </p>
+      </div>
+
+      <!-- Contact -->
+      <div class="glass rounded-3xl p-5 md:p-6 text-sm text-slate-200 space-y-3">
+        <h2 class="font-bold text-white text-lg">Contact</h2>
+        <p>
+          Questions, feedback, or partnership ideas about CashPrep or the College Money Map tool are
+          welcome. You can reach the creator of this demo directly by email.
+        </p>
+        <p>
+          Email:
+          <a href="mailto:unbanked123@gmail.com" class="text-cyan-300 underline">
+            unbanked123@gmail.com
+          </a>
+        </p>
+        <p>
+          When you click the email link, your device will open your default email app with a new
+          message addressed to this inbox so you can send your note easily.[web:33][web:36]
+        </p>
+      </div>
+    </div>
+
+    <!-- Footer accordions -->
+    <div class="grid md:grid-cols-2 gap-4">
+      <!-- About CashPrep (original accordion, kept as reference/explainer) -->
+      <details class="glass rounded-3xl p-5 md:p-6">
+        <summary class="flex items-center justify-between cursor-pointer">
+          <span class="font-bold text-white">About CashPrep & how estimates work</span>
+          <span class="text-xs text-slate-300 ml-2">tap to expand</span>
+        </summary>
+        <div class="pt-4 text-sm text-slate-200 space-y-3">
+          <p>
+            CashPrep is a simple planning tool designed to help college students think about how much
+            spending money they may want to save for one academic year, excluding tuition and required
+            fees. It is not financial advice and does not guarantee any particular cost outcome.
+          </p>
+          <p>
+            The model behind this page is inspired by how colleges and the U.S. Department of Education
+            build a student’s “cost of attendance,” which always includes estimated living expenses like
+            housing, food, transportation, and miscellaneous personal costs in addition to tuition and fees.[web:28][web:31]
+          </p>
+          <p>
+            Public, research-based sources show that non-tuition living expenses (housing, food, transport,
+            personal) are often the second‑largest part of college costs and can vary by several thousand
+            dollars per year across regions and schools.[web:30][web:37]
+          </p>
+          <p>
+            For now, this demo uses representative baseline amounts and multipliers for different campuses
+            and states, plus your sliders for spending, takeout, bars, and partying, to generate an
+            estimate. Those baselines are designed to roughly line up with typical room, board, transport,
+            and personal-expense ranges reported in public cost-of-attendance and affordability research,
+            but they are not the official numbers for any specific school.[web:27][web:31]
+          </p>
+          <p>
+            The “Meal plan” vs “No meal plan” toggle adjusts how much of your food budget is assumed to be
+            pre-paid on campus versus off-campus spending, based on typical campus meal-plan costs and
+            common estimates of student food spending for those without a plan.[web:40][web:37]
+          </p>
+          <p>
+            In future versions, CashPrep can be connected directly to live, school‑specific cost data
+            (for example via the College Scorecard or institutional student-budget tables) so that each
+            campus estimate is driven by current published living-expense figures rather than generic
+            baselines.[web:29][web:37]
+          </p>
+        </div>
+      </details>
+
+      <!-- Privacy policy (original accordion, now more of a “tech” view) -->
+      <details class="glass rounded-3xl p-5 md:p-6">
+        <summary class="flex items-center justify-between cursor-pointer">
+          <span class="font-bold text-white">Privacy policy for this page</span>
+          <span class="text-xs text-slate-300 ml-2">tap to expand</span>
+        </summary>
+        <div class="pt-4 text-sm text-slate-200 space-y-3">
+          <p>
+            This CashPrep page is a static calculator and is not designed to collect personal
+            information such as your name, email address, phone number, or payment details. The
+            sliders and inputs you adjust are processed only in your browser to show you an estimate.[web:32]
+          </p>
+          <p>
+            No account system, login, or payment processing is built into this page. As long as you
+            host it on a static platform without extra analytics or third‑party scripts, the site
+            itself does not store or sell your personal data.[web:38]
+          </p>
+          <p>
+            Your use of this page may still be subject to the privacy and cookie practices of the
+            hosting provider and any third-party services you add later. Those services may collect
+            standard technical information such as IP addresses, device type, and basic usage logs
+            to operate and secure their platforms.[web:32]
+          </p>
+          <p>
+            This privacy notice is a general description for a no‑tracking, no‑login version of the
+            CashPrep calculator. It is not legal advice. If you plan to collect personal data or have
+            users in regions with specific privacy laws, you should consult legal guidance or use a
+            tailored privacy‑policy generator to ensure full compliance.[web:32][web:35]
+          </p>
+        </div>
+      </details>
+    </div>
+  </div>
+
+<script>
+const schools = [
+  {name:'University of California, Santa Barbara', state:'CA', theme:['#1d4ed8','#06b6d4'], base:13800, nightlife:1.35},
+  {name:'Florida State University', state:'FL', theme:['#7c3aed','#ef4444'], base:13200, nightlife:1.32},
+  {name:'Tulane University', state:'LA', theme:['#16a34a','#0ea5e9'], base:15400, nightlife:1.35},
+  {name:'University of Wisconsin-Madison', state:'WI', theme:['#c026d3','#f97316'], base:12700, nightlife:1.28},
+  {name:'University of Alabama', state:'AL', theme:['#991b1b','#f59e0b'], base:13600, nightlife:1.30},
+  {name:'University of Georgia', state:'GA', theme:['#b91c1c','#1d4ed8'], base:12900, nightlife:1.27},
+  {name:'Syracuse University', state:'NY', theme:['#f97316','#7c3aed'], base:15000, nightlife:1.22},
+  {name:'University of Colorado Boulder', state:'CO', theme:['#0f766e','#2563eb'], base:14100, nightlife:1.25},
+  {name:'University of Illinois Urbana-Champaign', state:'IL', theme:['#e11d48','#2563eb'], base:13100, nightlife:1.24},
+  {name:'Penn State', state:'PA', theme:['#1d4ed8','#f59e0b'], base:13700, nightlife:1.21},
+  {name:'Ohio State University', state:'OH', theme:['#dc2626','#111827'], base:13300, nightlife:1.23},
+  {name:'University of Miami', state:'FL', theme:['#f97316','#0ea5e9'], base:15500, nightlife:1.29}
+];
+
+const stateDefaults = {
+  CA:14400, FL:13300, LA:13600, WI:12400, AL:12800, GA:13000,
+  NY:15000, CO:14000, IL:13100, PA:13300, OH:12900
+};
+
+const stateNames = [
+  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA',
+  'ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK',
+  'OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'
+];
+
+const weightLabels = ['Spending','Takeout','Bars','Partying'];
+const defaultWeights = [1,2,3,4];
+
+let mealMode = 'plan';
+let selected = null;
+let weights = [...defaultWeights];
+
+const el = id => document.getElementById(id);
+
+// Populate states
+el('stateSelect').innerHTML = stateNames
+  .map(s => `<option value="${s}">${s}</option>`)
+  .join('');
+el('stateSelect').value = 'CA';
+
+// Build weight sliders
+el('weights').innerHTML = weightLabels.map((label, i) => `
+  <div class="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+    <div class="flex items-center justify-between mb-2">
+      <span>${label}</span>
+      <span class="text-cyan-300 font-bold" id="w${i}">${defaultWeights[i]}</span>
+    </div>
+    <input type="range" min="1" max="4" value="${defaultWeights[i]}" data-i="${i}" class="w-full">
+  </div>
+`).join('');
+
+function applyTheme(theme) {
+  document.documentElement.style.setProperty('--bg1', theme[0]);
+  document.documentElement.style.setProperty('--bg2', theme[1]);
+  el('themeBadge').textContent = 'School theme active';
+}
+
+function recalc() {
+  const s = selected || {
+    state: el('stateSelect').value,
+    base: stateDefaults[el('stateSelect').value] || 13000,
+    nightlife: 1
+  };
+
+  const need = weights.reduce((a, b) => a + b, 0) / 10;
+  const habit = 0.88 + need * 0.34;
+
+  const meal = mealMode === 'plan' ? 5700 : 5000;
+  const offCampus = mealMode === 'no_plan' ? 2300 : 1500;
+
+  const nightlifeCost = 600 * (s.nightlife || 1) * (weights[2]/4 + weights[3]/4);
+  const takeoutCost = 900 * (weights[1]/4);
+  const spendingCost = 1200 * (weights[0]/4);
+
+  const base = s.base || 13000;
+
+  const total = Math.round(
+    (base + meal + offCampus + nightlifeCost + takeoutCost + spendingCost) * habit
+  );
+
+  el('estimate').textContent = '$' + total.toLocaleString();
+  el('mealNote').textContent =
+    mealMode === 'plan'
+      ? 'Meal plan is built in, with some off-campus spending still expected.'
+      : 'No meal plan: estimate includes groceries plus realistic off-campus food spending.';
+
+  chart.data.datasets[0].data = [
+    base, meal, offCampus, nightlifeCost, takeoutCost, spendingCost
+  ];
+  chart.update();
+}
+
+// Chart setup
+const chart = new Chart(el('chart'), {
+  type: 'doughnut',
+  data: {
+    labels: [
+      'Campus cost baseline',
+      'Meal setup',
+      'Off-campus buffer',
+      'Bars',
+      'Takeout',
+      'Personal spending'
+    ],
+    datasets: [{
+      data: [1,1,1,1,1,1],
+      backgroundColor: [
+        '#60a5fa','#34d399','#fbbf24','#fb7185','#a78bfa','#22d3ee'
+      ]
+    }]
+  },
+  options: {
+    plugins: {
+      legend: { labels: { color: '#fff' } }
+    }
+  }
+});
+
+// Meal mode buttons
+document.querySelectorAll('[data-meal]').forEach(btn => {
+  btn.onclick = () => {
+    mealMode = btn.dataset.meal;
+    document
+      .querySelectorAll('[data-meal]')
+      .forEach(x => x.classList.remove('active','bg-cyan-400/30'));
+    btn.classList.add('active','bg-cyan-400/30');
+    recalc();
+  };
+});
+
+// Weight sliders
+document.querySelectorAll('input[type=range]').forEach(r => {
+  r.oninput = e => {
+    const i = +e.target.dataset.i;
+    weights[i] = +e.target.value;
+    el('w' + i).textContent = e.target.value;
+    recalc();
+  };
+});
+
+// State change
+el('stateSelect').onchange = recalc;
+
+// School search
+el('schoolSearch').oninput = e => {
+  const q = e.target.value.toLowerCase().trim();
+  const resultsBox = document.getElementById('schoolResults');
+  if (!q) {
+    resultsBox.innerHTML = '';
+    return;
+  }
+  const results = schools.filter(s =>
+    s.name.toLowerCase().includes(q) ||
+    s.state.toLowerCase().includes(q)
+  );
+  resultsBox.innerHTML = results.map((s, i) => `
+    <button
+      class="w-full text-left p-3 rounded-2xl bg-white/10 hover:bg-white/20"
+      data-school="${i}"
+    >
+      <div class="font-semibold">${s.name}</div>
+      <div class="text-xs text-slate-300">
+        ${s.state} · nightlife index ${s.nightlife.toFixed(2)}
+      </div>
+    </button>
+  `).join('');
+
+  document.querySelectorAll('[data-school]').forEach(btn => {
+    btn.onclick = () => {
+      selected = schools[+btn.dataset.school];
+      el('selectedSchool').innerHTML = `
+        <div class="font-bold text-lg">${selected.name}</div>
+        <div class="text-slate-300 text-sm">
+          ${selected.state} · base estimate mapped to school profile
+        </div>
+      `;
+      applyTheme(selected.theme);
+      recalc();
+    };
+  });
+};
+
+// Initial state
+selected = schools[0];
+el('selectedSchool').innerHTML = `
+  <div class="font-bold text-lg">${selected.name}</div>
+  <div class="text-slate-300 text-sm">
+    ${selected.state} · base estimate mapped to school profile
+  </div>
+`;
+applyTheme(selected.theme);
+document.querySelector('[data-meal="plan"]').classList.add('active','bg-cyan-400/30');
+recalc();
+</script>
+
+<!-- Adsterra scripts at the very bottom -->
+<script src="https://thorpejoy.com/36/d9/6b/36d96be6b1c7eaa515bd395b3d6be177.js"></script>
+<script src="https://thorpejoy.com/f6/58/4b/f6584bd4c3aa6c23b9105c600389d54c.js"></script>
+
+</body>
+</html>
